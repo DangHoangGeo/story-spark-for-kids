@@ -1,0 +1,5 @@
+{
+  "name": "Story Spark",
+  "description": "An interactive tool that uses generative AI to create, illustrate, and narrate multimedia stories for children, complete with a fun quiz at the end.",
+  "requestFramePermissions": []
+}
