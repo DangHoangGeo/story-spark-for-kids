@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 
 const messages = [
@@ -7,7 +6,7 @@ const messages = [
   "Painting the pictures with magic colors...",
   "Warming up our storytelling voice...",
   "Unfolding the adventure map...",
-  "Your story is almost ready!"
+  "Your 1-minute story is almost ready!"
 ];
 
 const LoadingScreen: React.FC = () => {
@@ -16,14 +15,21 @@ const LoadingScreen: React.FC = () => {
   useEffect(() => {
     const interval = setInterval(() => {
       setMessageIndex(prevIndex => (prevIndex + 1) % messages.length);
-    }, 3000);
+    }, 2500); // Synced with animation speed
 
     return () => clearInterval(interval);
   }, []);
 
   return (
     <div className="flex flex-col items-center justify-center text-center p-8">
-      <div className="w-16 h-16 border-4 border-t-amber-500 border-gray-200 rounded-full animate-spin mb-6"></div>
+      <div className="relative w-[60px] h-[80px] mb-8 book">
+          <div className="book__pg-shadow"></div>
+          <div className="book__pg"></div>
+          <div className="book__pg book__pg--2"></div>
+          <div className="book__pg book__pg--3"></div>
+          <div className="book__pg book__pg--4"></div>
+          <div className="book__pg book__pg--5"></div>
+      </div>
       <h2 className="text-2xl font-semibold text-amber-600">{messages[messageIndex]}</h2>
     </div>
   );

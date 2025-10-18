@@ -1,6 +1,14 @@
 import { GoogleGenAI, Type } from "@google/genai";
 import { StoryData, PageData, QuizData, VocabularyData, WordTimestamp, PageQuizData } from '../types';
 
+// Map friendly names to API voice names
+const voiceMap: { [key: string]: string } = {
+  'Leo (Warm & Friendly)': 'Kore',
+  'Nova (Bright & Cheerful)': 'Puck',
+  'Atlas (Calm & Soothing)': 'Zephyr',
+  'Luna (Gentle & Sweet)': 'Charon',
+};
+
 const storySchema = {
   type: Type.OBJECT,
   properties: {
@@ -20,7 +28,7 @@ const storySchema = {
         properties: {
           text: {
             type: Type.STRING,
-            description: "The story text for this page, written in simple language for a 5-year-old child."
+            description: "The story text for this page, written in simple language for the target age group."
           },
           timedText: {
             type: Type.ARRAY,
@@ -41,7 +49,7 @@ const storySchema = {
           },
           vocabulary: {
             type: Type.OBJECT,
-            description: "An optional key vocabulary word from the page text, with a simple definition and a fun fact for a 5-year-old.",
+            description: "An optional key vocabulary word from the page text, with a simple definition and a fun fact for a child.",
             properties: {
               word: { type: Type.STRING, description: "The vocabulary word found in the page text." },
               definition: { type: Type.STRING, description: "A simple, one-sentence definition of the word for a child." },
@@ -104,11 +112,11 @@ interface StoryStructure {
   quiz: QuizData;
 }
 
-async function generateStoryStructure(prompt: string): Promise<StoryStructure> {
+async function generateStoryStructure(prompt: string, audience: string): Promise<StoryStructure> {
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
   const response = await ai.models.generateContent({
     model: "gemini-2.5-pro",
-    contents: `Create a 3-page children's story based on this idea: "${prompt}". The story should have a title, a category (Adventure, Fantasy, Science, or Friendship), and be suitable for a 5-year-old. For each page, provide: 1) The story text. 2) A word-by-word timestamp array ('timedText'). 3) A detailed image prompt. 4) An optional key vocabulary word with definition and fun fact. 5) A simple multiple-choice question about that page's content ('pageQuiz'). Finally, create one multiple-choice quiz question about the entire story.`,
+    contents: `Create a short, approximately 1-minute (3-page) children's story for a child in the "${audience}" age group, based on this idea: "${prompt}". The story should have a title, a category (Adventure, Fantasy, Science, or Friendship), and be suitable for the specified age. For each page, provide: 1) The story text. 2) A word-by-word timestamp array ('timedText'). 3) A detailed image prompt. 4) An optional key vocabulary word with definition and fun fact. 5) An optional simple multiple-choice question about that page's content ('pageQuiz'). Finally, create one multiple-choice quiz question about the entire story.`,
     config: {
       responseMimeType: "application/json",
       responseSchema: storySchema,
@@ -144,8 +152,10 @@ async function generateImage(prompt: string): Promise<string> {
 }
 
 
-async function generateAudio(text: string): Promise<string> {
+async function generateAudio(text: string, voice: string): Promise<string> {
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+  const apiVoiceName = voiceMap[voice] || 'Kore'; // Default to Kore if not found
+
   const response = await ai.models.generateContent({
     model: "gemini-2.5-flash-preview-tts",
     contents: [{ parts: [{ text: text }] }],
@@ -153,7 +163,7 @@ async function generateAudio(text: string): Promise<string> {
       responseModalities: ['AUDIO'],
       speechConfig: {
         voiceConfig: {
-          prebuiltVoiceConfig: { voiceName: 'Kore' }, // A friendly voice
+          prebuiltVoiceConfig: { voiceName: apiVoiceName },
         },
       },
     },
@@ -166,20 +176,20 @@ async function generateAudio(text: string): Promise<string> {
   return base64Audio;
 }
 
-export const generateFullStory = async (prompt: string): Promise<Omit<StoryData, 'id' | 'loves'>> => {
-  const structure = await generateStoryStructure(prompt);
+export const generateFullStory = async (prompt: string, audience: string, voice: string): Promise<Omit<StoryData, 'id' | 'loves'>> => {
+  const structure = await generateStoryStructure(prompt, audience);
 
   const populatedPages: PageData[] = await Promise.all(
     structure.pages.map(async (page): Promise<PageData> => {
       const imagePromise = generateImage(page.imagePrompt);
-      const audioPromise = generateAudio(page.text);
+      const audioPromise = generateAudio(page.text, voice);
 
       const definitionAudioPromise = page.vocabulary?.definition
-          ? generateAudio(page.vocabulary.definition).catch(() => undefined)
+          ? generateAudio(page.vocabulary.definition, voice).catch(() => undefined)
           : Promise.resolve(undefined);
       
       const funFactAudioPromise = page.vocabulary?.funFact
-          ? generateAudio(page.vocabulary.funFact).catch(() => undefined)
+          ? generateAudio(page.vocabulary.funFact, voice).catch(() => undefined)
           : Promise.resolve(undefined);
           
       const [imageData, audioData, definitionAudioData, funFactAudioData] = await Promise.all([
@@ -215,5 +225,7 @@ export const generateFullStory = async (prompt: string): Promise<Omit<StoryData,
     category: structure.category,
     pages: populatedPages,
     quiz: structure.quiz,
+    targetAudience: audience,
+    voiceName: voice,
   };
 };

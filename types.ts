@@ -50,4 +50,6 @@ export interface StoryData {
   loves: number;
   pages: PageData[];
   quiz: QuizData;
+  targetAudience?: string; // e.g., "Preschoolers (4-5 years)"
+  voiceName?: string; // e.g., "Nova (Bright & Cheerful)"
 }

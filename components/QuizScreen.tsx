@@ -8,6 +8,21 @@ interface QuizScreenProps {
   onFinish: () => void;
 }
 
+const Celebration: React.FC = () => (
+    <div className="absolute inset-0 overflow-hidden pointer-events-none">
+        {Array.from({ length: 40 }).map((_, i) => {
+            const style = {
+                left: `${Math.random() * 100}%`,
+                top: `${Math.random() * 100}%`,
+                animationDelay: `${Math.random() * 0.5}s`,
+                transform: `scale(${Math.random() * 0.8 + 0.5})`,
+            };
+            const emoji = ['✨', '🎉', '🎈', '⭐'][Math.floor(Math.random() * 4)];
+            return <div key={i} className="sparkle-emoji" style={style}>{emoji}</div>;
+        })}
+    </div>
+);
+
 const QuizScreen: React.FC<QuizScreenProps> = ({ quiz, story, onFinish }) => {
   const [selectedAnswer, setSelectedAnswer] = useState<number | null>(null);
   const [isAnswered, setIsAnswered] = useState(false);
@@ -36,7 +51,8 @@ const QuizScreen: React.FC<QuizScreenProps> = ({ quiz, story, onFinish }) => {
   };
   
   return (
-    <div className="w-full max-w-2xl text-center p-8 bg-white rounded-2xl shadow-lg">
+    <div className="w-full max-w-2xl text-center p-8 bg-white rounded-2xl shadow-lg relative">
+      {isAnswered && selectedAnswer === quiz.correctAnswerIndex && <Celebration />}
       <h2 className="text-3xl font-bold text-amber-600 mb-6">Quiz Time!</h2>
       <p className="text-xl text-gray-700 mb-8">{quiz.question}</p>
       <div className="space-y-4">
@@ -54,7 +70,7 @@ const QuizScreen: React.FC<QuizScreenProps> = ({ quiz, story, onFinish }) => {
       {isAnswered && (
         <div className="mt-8 animate-fade-in">
             <p className="text-2xl font-bold mb-4">
-                {selectedAnswer === quiz.correctAnswerIndex ? '🎉 You got it! 🎉' : 'Oops! Good try!'}
+                {selectedAnswer === quiz.correctAnswerIndex ? '🎉 You got it! Well done! 🎉' : 'Oops! Good try!'}
             </p>
             <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
                 <button

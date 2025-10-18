@@ -24,12 +24,12 @@ const App: React.FC = () => {
     });
   }, []);
 
-  const handleCreateStory = useCallback(async (prompt: string) => {
+  const handleCreateStory = useCallback(async (prompt: string, audience: string, voice: string) => {
     setAppState(AppState.LOADING);
     setError(null);
     setActiveStory(null);
     try {
-      const data = await generateFullStory(prompt);
+      const data = await generateFullStory(prompt, audience, voice);
       const newStory = {
         ...data,
         id: `story-${Date.now()}`,
@@ -123,6 +123,7 @@ const App: React.FC = () => {
         if (!activeStory) return null;
         return (
           <StoryViewer 
+            key={currentPageIndex}
             story={activeStory}
             page={activeStory.pages[currentPageIndex]}
             isFirstPage={currentPageIndex === 0}

@@ -11,6 +11,8 @@ let mockStories: StoryData[] = [
     title: 'Finn the Brave Fox',
     category: 'Adventure',
     loves: 28,
+    targetAudience: 'Preschoolers (4-5 years)',
+    voiceName: 'Leo (Warm & Friendly)',
     pages: [
       {
         text: 'Once upon a time, a little fox named Finn found a mysterious, glowing key in the forest.',
@@ -64,6 +66,8 @@ let mockStories: StoryData[] = [
     title: 'The Star Sailor',
     category: 'Fantasy',
     loves: 42,
+    targetAudience: 'Early Readers (6-7 years)',
+    voiceName: 'Nova (Bright & Cheerful)',
     pages: [
         {
           text: 'Lily was a girl who sailed a boat through the night sky, catching fallen stars in her net.',

@@ -15,15 +15,32 @@ interface StoryViewerProps {
   onExit: () => void;
 }
 
+const Celebration: React.FC = () => (
+    <div className="absolute inset-0 overflow-hidden pointer-events-none">
+        {Array.from({ length: 20 }).map((_, i) => {
+            const style = {
+                left: `${Math.random() * 100}%`,
+                top: `${Math.random() * 100}%`,
+                animationDelay: `${Math.random() * 0.5}s`,
+                transform: `scale(${Math.random() * 0.5 + 0.5})`,
+            };
+            return <div key={i} className="sparkle-emoji" style={style}>✨</div>;
+        })}
+    </div>
+);
+
+
 const PageQuiz: React.FC<{ quiz: PageQuizData, onCorrectAnswer: () => void }> = ({ quiz, onCorrectAnswer }) => {
     const [selected, setSelected] = useState<number | null>(null);
     const [answered, setAnswered] = useState(false);
+    const [showCelebration, setShowCelebration] = useState(false);
 
     const handleAnswer = (index: number) => {
         if (answered) return;
         setSelected(index);
         setAnswered(true);
         if(index === quiz.correctAnswerIndex) {
+            setShowCelebration(true);
             setTimeout(() => onCorrectAnswer(), 1000);
         }
     };
@@ -36,7 +53,8 @@ const PageQuiz: React.FC<{ quiz: PageQuizData, onCorrectAnswer: () => void }> = 
     };
 
     return (
-        <div className="mt-6 p-4 bg-amber-100/50 rounded-xl">
+        <div className="mt-6 p-4 bg-amber-100/50 rounded-xl relative">
+            {showCelebration && <Celebration />}
             <h4 className="font-bold text-lg text-amber-800 mb-3">{quiz.question}</h4>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                 {quiz.options.map((option, index) => (
@@ -216,7 +234,7 @@ const StoryViewer: React.FC<StoryViewerProps> = ({ story, page, isFirstPage, isL
   return (
     <>
       <VocabModal />
-      <div className="w-full max-w-4xl flex flex-col items-center">
+      <div className="w-full max-w-4xl flex flex-col items-center animate-fade-in">
         <div className="w-full max-w-2xl flex justify-between items-center mb-2 px-2">
             <button onClick={onExit} className="text-sm text-amber-600 hover:underline">&larr; Back to Explore</button>
             <div className="flex items-center space-x-2">

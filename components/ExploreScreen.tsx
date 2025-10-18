@@ -62,7 +62,10 @@ const ExploreScreen: React.FC<ExploreScreenProps> = ({ stories, onSelectStory, o
     <div className="w-full max-w-7xl mx-auto p-4 md:p-8">
       <header className="flex flex-col md:flex-row justify-between items-center mb-8 gap-4">
         <div className="text-center md:text-left">
-          <h1 className="text-4xl md:text-5xl font-bold text-amber-500">Story Spark</h1>
+          <h1 className="text-4xl md:text-5xl font-bold text-amber-500 flex items-center justify-center md:justify-start">
+            Story Spark 
+            <span className="text-3xl ml-2 animate-pulse-once">✨</span>
+          </h1>
           <p className="text-lg text-gray-600 mt-1">Explore magical stories created by others!</p>
         </div>
         <div className="flex flex-col sm:flex-row gap-4 items-center shrink-0">
