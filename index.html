@@ -86,6 +86,31 @@
         20% { transform: rotateY(-180deg); }
         100% { transform: rotateY(-180deg); }
       }
+
+      /* Ken Burns Effect */
+      @keyframes ken-burns {
+        0% { transform: scale(1) translate(0, 0); }
+        100% { transform: scale(1.1) translate(-2%, 2%); }
+      }
+      .animate-ken-burns {
+        animation: ken-burns 15s ease-out forwards;
+      }
+
+      /* Word Tap Spinner */
+       @keyframes spin {
+        to { transform: rotate(360deg); }
+      }
+      .word-spinner {
+        display: inline-block;
+        width: 1em;
+        height: 1em;
+        border: 2px solid currentColor;
+        border-right-color: transparent;
+        border-radius: 50%;
+        animation: spin 0.6s linear infinite;
+        vertical-align: middle;
+        margin-left: 2px;
+      }
     </style>
   <script type="importmap">
 {

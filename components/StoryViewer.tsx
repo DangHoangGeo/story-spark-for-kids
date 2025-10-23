@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { PageData, VocabularyData, StoryData, PageQuizData } from '../types';
-import { playAudio } from '../utils/audioUtils';
+import { audioManager } from '../utils/audioUtils';
 import { exportStoryAsJson } from '../utils/exportUtils';
 import Celebration from './Celebration';
+import { generateSingleWordAudio } from '../services/geminiService';
 
 interface StoryViewerProps {
   story: StoryData;
@@ -59,32 +60,19 @@ const PageQuiz: React.FC<{ quiz: PageQuizData, onCorrectAnswer: () => void }> = 
 const StoryViewer: React.FC<StoryViewerProps> = ({ story, page, currentPageIndex, isFirstPage, isLastPage, onNext, onPrev, onLove, isViewingSharedStory, onExit }) => {
   const [isAnimating, setIsAnimating] = useState(false);
   const [vocabData, setVocabData] = useState<VocabularyData | null>(null);
-  const [isPlaying, setIsPlaying] = useState(false);
+  const [isNarrationPlaying, setIsNarrationPlaying] = useState(false);
   const [pageQuizAnswered, setPageQuizAnswered] = useState(!page.pageQuiz);
-
   const [activeWordIndex, setActiveWordIndex] = useState(-1);
-  const audioSourceRef = useRef<AudioBufferSourceNode | null>(null);
-  const animationFrameRef = useRef<number | null>(null);
-  const audioContextRef = useRef<AudioContext | null>(null);
+  const [tappedWord, setTappedWord] = useState<{word: string, index: number} | null>(null);
+  const [isTappedWordLoading, setIsTappedWordLoading] = useState(false);
 
-  const stopAudioAndAnimation = (completeReset = true) => {
-    if (audioSourceRef.current) {
-        try {
-            audioSourceRef.current.stop();
-            audioSourceRef.current.disconnect();
-        } catch(e) { /* Already stopped */ }
-        if(completeReset) audioSourceRef.current = null;
-    }
-    if (animationFrameRef.current) {
-        cancelAnimationFrame(animationFrameRef.current);
-        animationFrameRef.current = null;
-    }
-    setActiveWordIndex(-1);
-    setIsPlaying(false);
-  };
+  const animationFrameRef = useRef<number | null>(null);
   
   useEffect(() => {
-    stopAudioAndAnimation();
+    audioManager.stopAllAudio();
+    setIsNarrationPlaying(false);
+    if (animationFrameRef.current) cancelAnimationFrame(animationFrameRef.current);
+    setActiveWordIndex(-1);
     setPageQuizAnswered(!page.pageQuiz); // Reset quiz state on page change
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [page]);
@@ -95,30 +83,34 @@ const StoryViewer: React.FC<StoryViewerProps> = ({ story, page, currentPageIndex
     setTimeout(() => setIsAnimating(false), 500);
   };
 
-  const handlePlayAudio = async () => {
-    if (isPlaying) {
-        stopAudioAndAnimation();
+  const handlePlayNarration = async () => {
+    if (isNarrationPlaying) {
+        audioManager.stopAllAudio();
+        setIsNarrationPlaying(false);
+        if (animationFrameRef.current) cancelAnimationFrame(animationFrameRef.current);
+        setActiveWordIndex(-1);
         return;
     }
 
     try {
-      const { source, context } = await playAudio(page.audio);
-      setIsPlaying(true);
-      audioSourceRef.current = source;
-      audioContextRef.current = context;
+      audioManager.stopAllAudio();
+      const { source, context } = await audioManager.playAudio(page.audio, 'narration');
+      setIsNarrationPlaying(true);
       const startTime = context.currentTime;
 
       source.onended = () => {
-        stopAudioAndAnimation();
+        setIsNarrationPlaying(false);
+        if (animationFrameRef.current) cancelAnimationFrame(animationFrameRef.current);
+        setActiveWordIndex(-1);
       };
       
       const animateText = () => {
-        if (!audioSourceRef.current || !audioContextRef.current || !page.timedText) {
-            stopAudioAndAnimation(false);
+        if (!audioManager.isPlaying('narration') || !page.timedText) {
+            if (animationFrameRef.current) cancelAnimationFrame(animationFrameRef.current);
             return;
         }
 
-        const elapsedTime = audioContextRef.current.currentTime - startTime;
+        const elapsedTime = context.currentTime - startTime;
         const currentWordIndex = page.timedText.findIndex(
             word => elapsedTime >= word.start && elapsedTime < word.end
         );
@@ -132,11 +124,34 @@ const StoryViewer: React.FC<StoryViewerProps> = ({ story, page, currentPageIndex
       }
 
     } catch(e) {
-        console.error("Could not play audio:", e);
-        setIsPlaying(false);
+        console.error("Could not play narration:", e);
+        setIsNarrationPlaying(false);
     }
   };
   
+  const handleWordTap = async (word: string, index: number) => {
+    if (isTappedWordLoading) return;
+    const cleanedWord = word.replace(/[^a-zA-Z]/g, '');
+    if (!cleanedWord) return;
+
+    audioManager.stopAllAudio();
+    setIsNarrationPlaying(false);
+    setActiveWordIndex(-1);
+    if (animationFrameRef.current) cancelAnimationFrame(animationFrameRef.current);
+
+    try {
+        setTappedWord({word, index});
+        setIsTappedWordLoading(true);
+        const audioData = await generateSingleWordAudio(cleanedWord, story.voiceName || 'Leo (Warm & Friendly)');
+        await audioManager.playAudio(audioData, 'word');
+    } catch(e) {
+        console.error("Failed to play word audio:", e);
+    } finally {
+        setIsTappedWordLoading(false);
+        setTappedWord(null);
+    }
+  };
+
   const handleShare = () => {
       navigator.clipboard.writeText(`Check out this story: "${story.title}" on Story Spark!`);
       alert("Link to story copied to clipboard! (Simulation)");
@@ -147,25 +162,39 @@ const StoryViewer: React.FC<StoryViewerProps> = ({ story, page, currentPageIndex
   }
 
   const renderTextContent = () => {
-    const textToRender = (page.timedText || page.text.split(' ').map(w => ({word: w, start:0, end:0})));
+    const textToRender = (page.timedText || page.text.split(' ').map((w, i) => ({word: w, start:0, end:0, index: i})));
     const wordElements = textToRender.map((wordInfo, index) => {
         const isVocab = page.vocabulary && page.vocabulary.word.toLowerCase() === wordInfo.word.replace(/[^a-zA-Z]/g, '').toLowerCase();
         
+        const content = (
+          <>
+            {wordInfo.word}
+            {isTappedWordLoading && tappedWord?.index === index && <span className="word-spinner"></span>}
+          </>
+        );
+
+        const className = `cursor-pointer rounded-md px-1 py-0.5 transition-all duration-200 ${index === activeWordIndex ? 'active-word' : 'hover:bg-amber-100'}`;
+
         if (isVocab && page.vocabulary) {
              return (
-                <button 
-                    key={index} 
-                    onClick={() => page.vocabulary && setVocabData(page.vocabulary)}
-                    className={`font-bold text-amber-600 rounded-md px-1 py-0.5 hover:bg-amber-200 transition-all duration-200 cursor-pointer relative after:content-[''] after:absolute after:bottom-0 after:left-0 after:w-full after:h-0.5 after:bg-amber-400 after:animate-pulse ${index === activeWordIndex ? 'active-word' : ''}`}
-                    aria-label={`Learn more about ${wordInfo.word}`}
-                >
-                    {wordInfo.word}{' '}
-                </button>
+                <span key={index}>
+                    <button 
+                        onClick={() => page.vocabulary && setVocabData(page.vocabulary)}
+                        className={`font-bold text-amber-600 relative after:content-[''] after:absolute after:bottom-0 after:left-0 after:w-full after:h-0.5 after:bg-amber-400 after:animate-pulse ${className}`}
+                        aria-label={`Learn more about ${wordInfo.word}`}
+                    >
+                        {wordInfo.word}
+                    </button>
+                    {' '}
+                </span>
             )
         }
         return (
-            <span key={index} className={index === activeWordIndex ? 'active-word' : 'transition-all duration-200'}>
-                {wordInfo.word}{' '}
+            <span key={index}>
+                <button onClick={() => handleWordTap(wordInfo.word, index)} className={className}>
+                    {content}
+                </button>
+                {' '}
             </span>
         );
     });
@@ -179,6 +208,52 @@ const StoryViewer: React.FC<StoryViewerProps> = ({ story, page, currentPageIndex
 
   const VocabModal = () => {
     if (!vocabData) return null;
+
+    const [isRecording, setIsRecording] = useState(false);
+    const [feedback, setFeedback] = useState('');
+
+    // FIX: Cannot find name 'webkitSpeechRecognition'.
+    // This is a browser-specific API. We need to access it via the window object and also check for the standard `SpeechRecognition` API.
+    const handlePronunciation = () => {
+        const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+
+        if (!SpeechRecognition) {
+            setFeedback("Sorry, your browser doesn't support this feature.");
+            return;
+        }
+
+        const recognition = new SpeechRecognition();
+        recognition.lang = 'en-US';
+        recognition.interimResults = false;
+        recognition.maxAlternatives = 1;
+
+        recognition.onstart = () => {
+            setIsRecording(true);
+            setFeedback('Listening...');
+        };
+
+        recognition.onresult = (event: any) => {
+            // const saidWord = event.results[0][0].transcript;
+            // For this demo, we'll just give positive feedback for any attempt.
+            setFeedback('Great try! ✨');
+        };
+
+        recognition.onerror = (event: any) => {
+            if (event.error === 'no-speech') {
+                setFeedback("I didn't hear anything. Try again!");
+            } else {
+                setFeedback('Oops! Something went wrong.');
+            }
+        };
+
+        recognition.onend = () => {
+            setIsRecording(false);
+            setTimeout(() => setFeedback(''), 2000);
+        };
+
+        recognition.start();
+    };
+
 
     return (
         <div 
@@ -194,24 +269,36 @@ const StoryViewer: React.FC<StoryViewerProps> = ({ story, page, currentPageIndex
                     <h3 id="vocab-title" className="text-3xl font-bold text-amber-600 mb-4 capitalize">{vocabData.word}</h3>
                 </div>
                 
-                <div className="mb-4 text-left">
-                    <p className="font-semibold text-gray-800 mb-1 flex items-center"><svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2 text-amber-500" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" /></svg>What it means:</p>
-                    <div className="flex items-center space-x-2 pl-2">
-                        <p className="text-gray-600 flex-grow text-lg">{vocabData.definition}</p>
-                        <button onClick={() => playAudio(vocabData.definitionAudio)} className="p-2 rounded-full bg-amber-100 text-amber-600 hover:bg-amber-200 transition" aria-label="Play definition audio">
-                           <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.552 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" /></svg>
-                        </button>
+                 <div className="space-y-4 text-left mb-4">
+                    {/* Definition */}
+                    <div>
+                        <p className="font-semibold text-gray-800 mb-1 flex items-center"><svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2 text-amber-500" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" /></svg>What it means:</p>
+                        <div className="flex items-center space-x-2 pl-2">
+                            <p className="text-gray-600 flex-grow text-lg">{vocabData.definition}</p>
+                            <button onClick={() => audioManager.playAudio(vocabData.definitionAudio, 'vocab')} className="p-2 rounded-full bg-amber-100 text-amber-600 hover:bg-amber-200 transition" aria-label="Play definition audio">
+                               <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.552 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" /></svg>
+                            </button>
+                        </div>
+                    </div>
+                    {/* Fun Fact */}
+                    <div>
+                        <p className="font-semibold text-gray-800 mb-1 flex items-center"><svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2 text-amber-500" viewBox="0 0 20 20" fill="currentColor"><path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" /></svg>Fun Fact!</p>
+                        <div className="flex items-center space-x-2 pl-2">
+                            <p className="text-gray-600 flex-grow text-lg">{vocabData.funFact}</p>
+                            <button onClick={() => audioManager.playAudio(vocabData.funFactAudio, 'vocab')} className="p-2 rounded-full bg-amber-100 text-amber-600 hover:bg-amber-200 transition" aria-label="Play fun fact audio">
+                              <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.552 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" /></svg>
+                            </button>
+                        </div>
                     </div>
                 </div>
 
-                <div className="text-left">
-                    <p className="font-semibold text-gray-800 mb-1 flex items-center"><svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2 text-amber-500" viewBox="0 0 20 20" fill="currentColor"><path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" /></svg>Fun Fact!</p>
-                    <div className="flex items-center space-x-2 pl-2">
-                        <p className="text-gray-600 flex-grow text-lg">{vocabData.funFact}</p>
-                        <button onClick={() => playAudio(vocabData.funFactAudio)} className="p-2 rounded-full bg-amber-100 text-amber-600 hover:bg-amber-200 transition" aria-label="Play fun fact audio">
-                          <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.552 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" /></svg>
-                        </button>
-                    </div>
+                {/* Pronunciation Practice */}
+                <div className="mt-4 p-4 bg-amber-100 rounded-lg text-center">
+                    <h4 className="font-bold text-gray-700 mb-2">Say It With Me!</h4>
+                    <button onClick={handlePronunciation} disabled={isRecording} className={`p-4 rounded-full transition-all duration-300 ${isRecording ? 'bg-red-500 animate-pulse' : 'bg-amber-500 hover:bg-amber-600'}`}>
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" /></svg>
+                    </button>
+                    {feedback && <p className="mt-2 font-semibold text-amber-700 animate-fade-in">{feedback}</p>}
                 </div>
             </div>
         </div>
@@ -243,7 +330,7 @@ const StoryViewer: React.FC<StoryViewerProps> = ({ story, page, currentPageIndex
 
 
         <div className="relative w-full aspect-square max-w-xl bg-gray-200 rounded-2xl shadow-lg mb-4 overflow-hidden">
-          <img src={`data:image/png;base64,${page.image}`} alt={page.imagePrompt} className="w-full h-full object-cover" />
+          <img key={page.image} src={`data:image/png;base64,${page.image}`} alt={page.imagePrompt} className="w-full h-full object-cover animate-ken-burns" />
           <div className="absolute top-1/3 left-1/3 w-1/3 h-1/3 cursor-pointer" onClick={handleImageTap} aria-label="Animate image">
             {isAnimating && (<div className="absolute inset-0 bg-white/30 rounded-full animate-pulse-once"></div>)}
           </div>
@@ -259,8 +346,8 @@ const StoryViewer: React.FC<StoryViewerProps> = ({ story, page, currentPageIndex
             <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 text-amber-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" /></svg>
           </button>
 
-          <button onClick={handlePlayAudio} className="p-5 rounded-full bg-amber-500 text-white shadow-lg transition-transform hover:scale-110" aria-label={isPlaying ? "Pause audio" : "Play page audio"}>
-             {isPlaying ? 
+          <button onClick={handlePlayNarration} className="p-5 rounded-full bg-amber-500 text-white shadow-lg transition-transform hover:scale-110" aria-label={isNarrationPlaying ? "Pause audio" : "Play page audio"}>
+             {isNarrationPlaying ? 
                 <svg xmlns="http://www.w3.org/2000/svg" className="h-10 w-10" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zM7 8a1 1 0 012 0v4a1 1 0 11-2 0V8zm4 0a1 1 0 012 0v4a1 1 0 11-2 0V8z" clipRule="evenodd" /></svg>
                 :
                 <svg xmlns="http://www.w3.org/2000/svg" className="h-10 w-10" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8.07v3.86a1 1 0 001.555.832l3.197-1.932a1 1 0 000-1.664L9.555 7.168z" clipRule="evenodd" /></svg>

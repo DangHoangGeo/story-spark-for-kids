@@ -1,4 +1,5 @@
 let audioContext: AudioContext | null = null;
+const activeSources: { [key: string]: AudioBufferSourceNode } = {};
 
 const getAudioContext = (): AudioContext => {
   if (!audioContext || audioContext.state === 'closed') {
@@ -36,24 +37,51 @@ async function decodeAudioData(
   return buffer;
 }
 
-export const playAudio = async (base64Audio: string): Promise<{source: AudioBufferSourceNode, context: AudioContext}> => {
-    try {
-        const ctx = getAudioContext();
-        // Ensure context is running
-        if (ctx.state === 'suspended') {
-            await ctx.resume();
+export const audioManager = {
+    playAudio: async (base64Audio: string, key: string): Promise<{source: AudioBufferSourceNode, context: AudioContext}> => {
+        try {
+            const ctx = getAudioContext();
+            if (ctx.state === 'suspended') {
+                await ctx.resume();
+            }
+            
+            // Stop any currently playing audio with the same key
+            if (activeSources[key]) {
+                try { activeSources[key].stop(); } catch (e) { /* Fails if already stopped */ }
+            }
+
+            const decodedBytes = decode(base64Audio);
+            const audioBuffer = await decodeAudioData(decodedBytes, ctx, 24000, 1);
+            
+            const source = ctx.createBufferSource();
+            source.buffer = audioBuffer;
+            source.connect(ctx.destination);
+            source.start();
+
+            activeSources[key] = source;
+
+            source.onended = () => {
+                delete activeSources[key];
+            };
+
+            return { source, context: ctx };
+        } catch (error) {
+            console.error("Failed to play audio:", error);
+            throw error;
         }
-        
-        const decodedBytes = decode(base64Audio);
-        const audioBuffer = await decodeAudioData(decodedBytes, ctx, 24000, 1);
-        
-        const source = ctx.createBufferSource();
-        source.buffer = audioBuffer;
-        source.connect(ctx.destination);
-        source.start();
-        return { source, context: ctx };
-    } catch (error) {
-        console.error("Failed to play audio:", error);
-        throw error;
+    },
+    
+    stopAllAudio: () => {
+        for (const key in activeSources) {
+            try {
+                activeSources[key].stop();
+                activeSources[key].disconnect();
+            } catch (e) { /* Already stopped */ }
+            delete activeSources[key];
+        }
+    },
+    
+    isPlaying: (key: string): boolean => {
+        return !!activeSources[key];
     }
 };

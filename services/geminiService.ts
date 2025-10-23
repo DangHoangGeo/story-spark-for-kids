@@ -219,6 +219,10 @@ async function generateAudio(text: string, voice: string): Promise<string> {
   return base64Audio;
 }
 
+export async function generateSingleWordAudio(word: string, voice: string): Promise<string> {
+    return generateAudio(word, voice);
+}
+
 export interface StoryGenerationParams {
   prompt: string;
   audience: string;
