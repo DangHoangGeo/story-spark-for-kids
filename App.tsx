@@ -6,7 +6,7 @@ import StoryViewer from './components/StoryViewer';
 import QuizScreen from './components/QuizScreen';
 import ExploreScreen from './components/ExploreScreen';
 import SequencingGameScreen from './components/SequencingGameScreen';
-import { generateFullStory } from './services/geminiService';
+import { generateInitialStory, populateStoryAssets } from './services/geminiService';
 import { getStories, loveStory as apiLoveStory } from './services/mockStoryService';
 
 const App: React.FC = () => {
@@ -40,34 +40,44 @@ const App: React.FC = () => {
     setError(null);
     setActiveStory(null);
     try {
-      const data = await generateFullStory(
-        {
-          prompt, 
-          audience, 
-          voice, 
-          pageCount, 
-          artStyle, 
-          theme, 
-          characterName, 
-          characterDescription
-        },
-        setLoadingMessage
-      );
-      const newStory = {
-        ...data,
+      // Phase 1: Get the story structure and text quickly
+      const storyParams = {
+        prompt, audience, voice, pageCount, artStyle, theme, characterName, characterDescription
+      };
+      const initialStoryData = await generateInitialStory(storyParams, setLoadingMessage);
+
+      const newStory: StoryData = {
+        ...initialStoryData,
         id: `story-${Date.now()}`,
         loves: 0,
       };
+
+      // Show the story viewer immediately with the text content
       setActiveStory(newStory);
       setCurrentPageIndex(0);
       setAppState(AppState.STORY);
+      setLoadingMessage(''); // Clear loading message as we are now in the story view
+
+      // Phase 2: Populate images and audio in the background
+      await populateStoryAssets(
+        newStory,
+        (populatedPage, index) => {
+          setActiveStory(currentStory => {
+            if (!currentStory) return null;
+            
+            const updatedPages = [...currentStory.pages];
+            updatedPages[index] = populatedPage;
+            
+            return { ...currentStory, pages: updatedPages };
+          });
+        }
+      );
+
     } catch (err) {
       console.error('Failed to generate story:', err);
       setError('Sorry, we couldn\'t create your story. The magical ink might have spilled! Please try again with a different idea.');
       setAppState(AppState.LANDING);
-    } finally {
-      setLoadingMessage(''); // Reset message on completion or error
-    }
+    } 
   }, []);
 
   const handleFinishCreation = (createdStory: StoryData) => {
@@ -87,6 +97,14 @@ const App: React.FC = () => {
     setActiveStory(story);
     setCurrentPageIndex(0);
     setAppState(AppState.VIEW_STORY);
+  };
+  
+  const handleUpdateStory = (updatedStory: StoryData) => {
+    setActiveStory(updatedStory);
+    // Also update the story in the community list for data consistency
+    setCommunityStories(prev => 
+        prev.map(s => s.id === updatedStory.id ? updatedStory : s)
+    );
   };
 
   const handleLoveStory = useCallback(async (storyId: string) => {
@@ -152,7 +170,7 @@ const App: React.FC = () => {
         if (!activeStory) return null;
         return (
           <StoryViewer 
-            key={currentPageIndex}
+            key={`${activeStory.id}-${currentPageIndex}`}
             story={activeStory}
             page={activeStory.pages[currentPageIndex]}
             currentPageIndex={currentPageIndex}
@@ -163,6 +181,7 @@ const App: React.FC = () => {
             onLove={handleLoveStory}
             isViewingSharedStory={appState === AppState.VIEW_STORY}
             onExit={handleExitToExplore}
+            onUpdateStory={handleUpdateStory}
           />
         );
       case AppState.QUIZ:

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { PageData, VocabularyData, StoryData, PageQuizData } from '../types';
+import { PageData, VocabularyData, StoryData, PageQuizData, ImageHotspot } from '../types';
 import { audioManager } from '../utils/audioUtils';
 import { exportStoryAsJson } from '../utils/exportUtils';
 import Celebration from './Celebration';
@@ -16,6 +16,7 @@ interface StoryViewerProps {
   onLove: (storyId: string) => void;
   isViewingSharedStory: boolean;
   onExit: () => void;
+  onUpdateStory: (story: StoryData) => void;
 }
 
 const PageQuiz: React.FC<{ quiz: PageQuizData, onCorrectAnswer: () => void }> = ({ quiz, onCorrectAnswer }) => {
@@ -57,7 +58,7 @@ const PageQuiz: React.FC<{ quiz: PageQuizData, onCorrectAnswer: () => void }> = 
 };
 
 
-const StoryViewer: React.FC<StoryViewerProps> = ({ story, page, currentPageIndex, isFirstPage, isLastPage, onNext, onPrev, onLove, isViewingSharedStory, onExit }) => {
+const StoryViewer: React.FC<StoryViewerProps> = ({ story, page, currentPageIndex, isFirstPage, isLastPage, onNext, onPrev, onLove, isViewingSharedStory, onExit, onUpdateStory }) => {
   const [isAnimating, setIsAnimating] = useState(false);
   const [vocabData, setVocabData] = useState<VocabularyData | null>(null);
   const [isNarrationPlaying, setIsNarrationPlaying] = useState(false);
@@ -65,8 +66,12 @@ const StoryViewer: React.FC<StoryViewerProps> = ({ story, page, currentPageIndex
   const [activeWordIndex, setActiveWordIndex] = useState(-1);
   const [tappedWord, setTappedWord] = useState<{word: string, index: number} | null>(null);
   const [isTappedWordLoading, setIsTappedWordLoading] = useState(false);
+  const [activeHotspot, setActiveHotspot] = useState<ImageHotspot | null>(null);
+  const [isEditMode, setIsEditMode] = useState(false);
 
   const animationFrameRef = useRef<number | null>(null);
+  const hotspotTimeoutRef = useRef<number | null>(null);
+  const imageContainerRef = useRef<HTMLDivElement>(null);
   
   useEffect(() => {
     audioManager.stopAllAudio();
@@ -74,6 +79,7 @@ const StoryViewer: React.FC<StoryViewerProps> = ({ story, page, currentPageIndex
     if (animationFrameRef.current) cancelAnimationFrame(animationFrameRef.current);
     setActiveWordIndex(-1);
     setPageQuizAnswered(!page.pageQuiz); // Reset quiz state on page change
+    setIsEditMode(false); // Exit edit mode on page change
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [page]);
 
@@ -152,6 +158,54 @@ const StoryViewer: React.FC<StoryViewerProps> = ({ story, page, currentPageIndex
     }
   };
 
+  const handleHotspotTap = async (hotspot: ImageHotspot) => {
+    if (isEditMode) return; // Don't trigger word reveal in edit mode
+    if (hotspotTimeoutRef.current) {
+        clearTimeout(hotspotTimeoutRef.current);
+    }
+    audioManager.stopSpecificAudio('hotspot');
+    setActiveHotspot(hotspot);
+    
+    try {
+        const audioData = await generateSingleWordAudio(hotspot.word, story.voiceName || 'Leo (Warm & Friendly)');
+        audioManager.playAudio(audioData, 'hotspot');
+    } catch(e) {
+        console.error("Failed to play hotspot audio:", e);
+    }
+
+    hotspotTimeoutRef.current = setTimeout(() => {
+        setActiveHotspot(null);
+    }, 2500);
+  };
+  
+  const handleHotspotDragEnd = (e: React.DragEvent<HTMLButtonElement>, hotspotIndex: number) => {
+    e.preventDefault();
+    const imageContainer = imageContainerRef.current;
+    if (!imageContainer) return;
+
+    const rect = imageContainer.getBoundingClientRect();
+    
+    // Calculate position relative to the container
+    const xPos = e.clientX - rect.left;
+    const yPos = e.clientY - rect.top;
+
+    // Convert to percentage and clamp between 0 and 100
+    const newX = Math.max(0, Math.min(100, (xPos / rect.width) * 100));
+    const newY = Math.max(0, Math.min(100, (yPos / rect.height) * 100));
+
+    // Create a deep copy to avoid direct mutation
+    const updatedStory = JSON.parse(JSON.stringify(story));
+    
+    // Update the specific hotspot's coordinates
+    if (updatedStory.pages[currentPageIndex].imageHotspots) {
+        updatedStory.pages[currentPageIndex].imageHotspots[hotspotIndex].x = newX;
+        updatedStory.pages[currentPageIndex].imageHotspots[hotspotIndex].y = newY;
+    }
+
+    // Call the callback to update the state in App.tsx
+    onUpdateStory(updatedStory);
+};
+
   const handleShare = () => {
       navigator.clipboard.writeText(`Check out this story: "${story.title}" on Story Spark!`);
       alert("Link to story copied to clipboard! (Simulation)");
@@ -211,9 +265,7 @@ const StoryViewer: React.FC<StoryViewerProps> = ({ story, page, currentPageIndex
 
     const [isRecording, setIsRecording] = useState(false);
     const [feedback, setFeedback] = useState('');
-
-    // FIX: Cannot find name 'webkitSpeechRecognition'.
-    // This is a browser-specific API. We need to access it via the window object and also check for the standard `SpeechRecognition` API.
+    
     const handlePronunciation = () => {
         const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
 
@@ -233,8 +285,6 @@ const StoryViewer: React.FC<StoryViewerProps> = ({ story, page, currentPageIndex
         };
 
         recognition.onresult = (event: any) => {
-            // const saidWord = event.results[0][0].transcript;
-            // For this demo, we'll just give positive feedback for any attempt.
             setFeedback('Great try! ✨');
         };
 
@@ -270,7 +320,6 @@ const StoryViewer: React.FC<StoryViewerProps> = ({ story, page, currentPageIndex
                 </div>
                 
                  <div className="space-y-4 text-left mb-4">
-                    {/* Definition */}
                     <div>
                         <p className="font-semibold text-gray-800 mb-1 flex items-center"><svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2 text-amber-500" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" /></svg>What it means:</p>
                         <div className="flex items-center space-x-2 pl-2">
@@ -280,7 +329,6 @@ const StoryViewer: React.FC<StoryViewerProps> = ({ story, page, currentPageIndex
                             </button>
                         </div>
                     </div>
-                    {/* Fun Fact */}
                     <div>
                         <p className="font-semibold text-gray-800 mb-1 flex items-center"><svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2 text-amber-500" viewBox="0 0 20 20" fill="currentColor"><path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" /></svg>Fun Fact!</p>
                         <div className="flex items-center space-x-2 pl-2">
@@ -292,7 +340,6 @@ const StoryViewer: React.FC<StoryViewerProps> = ({ story, page, currentPageIndex
                     </div>
                 </div>
 
-                {/* Pronunciation Practice */}
                 <div className="mt-4 p-4 bg-amber-100 rounded-lg text-center">
                     <h4 className="font-bold text-gray-700 mb-2">Say It With Me!</h4>
                     <button onClick={handlePronunciation} disabled={isRecording} className={`p-4 rounded-full transition-all duration-300 ${isRecording ? 'bg-red-500 animate-pulse' : 'bg-amber-500 hover:bg-amber-600'}`}>
@@ -329,11 +376,55 @@ const StoryViewer: React.FC<StoryViewerProps> = ({ story, page, currentPageIndex
         <p className="text-sm text-gray-500 mb-4">Page {currentPageIndex + 1} of {story.pages.length}</p>
 
 
-        <div className="relative w-full aspect-square max-w-xl bg-gray-200 rounded-2xl shadow-lg mb-4 overflow-hidden">
-          <img key={page.image} src={`data:image/png;base64,${page.image}`} alt={page.imagePrompt} className="w-full h-full object-cover animate-ken-burns" />
-          <div className="absolute top-1/3 left-1/3 w-1/3 h-1/3 cursor-pointer" onClick={handleImageTap} aria-label="Animate image">
-            {isAnimating && (<div className="absolute inset-0 bg-white/30 rounded-full animate-pulse-once"></div>)}
-          </div>
+        <div 
+          ref={imageContainerRef}
+          onDragOver={(e) => e.preventDefault()}
+          className="relative w-full aspect-square max-w-xl bg-gray-200 rounded-2xl shadow-lg mb-4 overflow-hidden"
+        >
+          {page.image ? (
+            <>
+              <button onClick={() => setIsEditMode(!isEditMode)} className="absolute top-2 left-2 z-20 bg-black/50 text-white px-3 py-1.5 rounded-full text-sm font-semibold hover:bg-black/70 transition-all">
+                {isEditMode ? '✅ Done Editing' : '✏️ Edit Hotspots'}
+              </button>
+              <img key={page.image} src={`data:image/png;base64,${page.image}`} alt={page.imagePrompt} className="w-full h-full object-cover animate-ken-burns" />
+              <div className="absolute top-1/3 left-1/3 w-1/3 h-1/3 cursor-pointer" onClick={handleImageTap} aria-label="Animate image">
+                {isAnimating && (<div className="absolute inset-0 bg-white/30 rounded-full animate-pulse-once"></div>)}
+              </div>
+              {/* Hotspots */}
+              {page.imageHotspots?.map((hotspot, index) => (
+                <button 
+                    key={`${hotspot.word}-${index}`} 
+                    className={`hotspot-marker ${isEditMode ? 'editable' : ''}`}
+                    style={{ left: `${hotspot.x}%`, top: `${hotspot.y}%` }}
+                    onClick={() => handleHotspotTap(hotspot)}
+                    draggable={isEditMode}
+                    onDragEnd={(e) => handleHotspotDragEnd(e, index)}
+                    aria-label={`Learn about the ${hotspot.word}`}
+                />
+              ))}
+              {/* Revealed Hotspot Word */}
+              {activeHotspot && (
+                <div 
+                    className="hotspot-word capitalize"
+                    style={{ left: `${activeHotspot.x}%`, top: `${activeHotspot.y - 8}%` }}
+                >
+                    {activeHotspot.word}
+                </div>
+              )}
+            </>
+          ) : (
+            <div className="w-full h-full flex flex-col items-center justify-center">
+                <div className="relative w-[60px] h-[80px] mb-8 book">
+                    <div className="book__pg-shadow"></div>
+                    <div className="book__pg"></div>
+                    <div className="book__pg book__pg--2"></div>
+                    <div className="book__pg book__pg--3"></div>
+                    <div className="book__pg book__pg--4"></div>
+                    <div className="book__pg book__pg--5"></div>
+                </div>
+                <p className="text-lg font-semibold text-amber-600">Illustrating page {currentPageIndex + 1}...</p>
+            </div>
+          )}
         </div>
 
         <div className="w-full max-w-2xl bg-white/80 backdrop-blur-sm p-6 rounded-2xl shadow-md text-center">
@@ -346,7 +437,7 @@ const StoryViewer: React.FC<StoryViewerProps> = ({ story, page, currentPageIndex
             <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 text-amber-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" /></svg>
           </button>
 
-          <button onClick={handlePlayNarration} className="p-5 rounded-full bg-amber-500 text-white shadow-lg transition-transform hover:scale-110" aria-label={isNarrationPlaying ? "Pause audio" : "Play page audio"}>
+          <button onClick={handlePlayNarration} disabled={!page.audio} className="p-5 rounded-full bg-amber-500 text-white shadow-lg transition-transform hover:scale-110 disabled:bg-gray-300 disabled:cursor-not-allowed" aria-label={isNarrationPlaying ? "Pause audio" : "Play page audio"}>
              {isNarrationPlaying ? 
                 <svg xmlns="http://www.w3.org/2000/svg" className="h-10 w-10" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zM7 8a1 1 0 012 0v4a1 1 0 11-2 0V8zm4 0a1 1 0 012 0v4a1 1 0 11-2 0V8z" clipRule="evenodd" /></svg>
                 :

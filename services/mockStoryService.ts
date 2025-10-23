@@ -20,6 +20,11 @@ let mockStories: StoryData[] = [
         imagePrompt: 'A small fox named Finn holding a glowing key in a magical forest, looking curious.',
         image: placeholderImage,
         audio: placeholderAudio,
+        imageHotspots: [
+            { word: "fox", x: 50, y: 60 },
+            { word: "key", x: 65, y: 65 },
+            { word: "tree", x: 20, y: 45 },
+        ],
         vocabulary: {
             word: "mysterious",
             definition: "Something that is hard to understand or explain.",
@@ -38,6 +43,10 @@ let mockStories: StoryData[] = [
         imagePrompt: 'Finn the fox standing in front of a big, ancient door covered in moss in a hillside.',
         image: placeholderImage,
         audio: placeholderAudio,
+        imageHotspots: [
+            { word: "door", x: 50, y: 50 },
+            { word: "hill", x: 70, y: 70 },
+        ],
         pageQuiz: {
             question: "Where was the ancient door?",
             options: ["In a tree", "Under the river", "In the side of a hill"],
@@ -49,6 +58,10 @@ let mockStories: StoryData[] = [
         imagePrompt: 'Finn the fox looking amazed at an open treasure chest filled with glowing acorns.',
         image: placeholderImage,
         audio: placeholderAudio,
+        imageHotspots: [
+            { word: "chest", x: 55, y: 65 },
+            { word: "acorns", x: 55, y: 50 },
+        ],
         pageQuiz: {
             question: "What was inside the treasure chest?",
             options: ["Magical acorns", "Shiny rocks", "Old shoes"],
@@ -83,6 +96,11 @@ let mockStories: StoryData[] = [
           imagePrompt: 'A young girl in a small sailboat floating on a starry night sky, catching stars with a net.',
           image: placeholderImage,
           audio: placeholderAudio,
+          imageHotspots: [
+              { word: "boat", x: 50, y: 50 },
+              { word: "star", x: 75, y: 30 },
+              { word: "sky", x: 50, y: 20 },
+          ],
            pageQuiz: {
             question: "How did Lily catch stars?",
             options: ["With her hands", "In a bucket", "In her net"],
@@ -94,6 +112,10 @@ let mockStories: StoryData[] = [
           imagePrompt: 'Lily the star sailor talking to a giant, friendly whale that looks like the moon, both are smiling.',
           image: placeholderImage,
           audio: placeholderAudio,
+          imageHotspots: [
+              { word: "whale", x: 60, y: 50 },
+              { word: "moon", x: 60, y: 50 },
+          ],
           vocabulary: {
             word: "gentle",
             definition: "Being kind, soft, and calm.",
@@ -112,6 +134,10 @@ let mockStories: StoryData[] = [
           imagePrompt: 'Lily and the moon-whale polishing stars together in the night sky with soft cloths.',
           image: placeholderImage,
           audio: placeholderAudio,
+           imageHotspots: [
+              { word: "star", x: 30, y: 40 },
+              { word: "star", x: 70, y: 60 },
+          ],
           pageQuiz: {
             question: "What did Lily and the moon-whale do together?",
             options: ["They polished stars", "They sang songs", "They ate moon cheese"],

@@ -71,9 +71,10 @@ const ExploreScreen: React.FC<ExploreScreenProps> = ({ stories, onSelectStory, o
         <div className="flex flex-col sm:flex-row gap-4 items-center shrink-0">
           <button
             onClick={handleImportClick}
-            className="px-6 py-3 bg-white text-amber-600 border-2 border-amber-500 font-bold text-lg rounded-full hover:bg-amber-50 transition-transform transform hover:scale-105 shadow-md"
+            className="px-6 py-3 bg-white text-amber-600 border-2 border-amber-500 font-bold text-lg rounded-full hover:bg-amber-50 transition-transform transform hover:scale-105 shadow-md flex items-center gap-2"
           >
-            📂 Import Story
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" /></svg>
+            Import Story File
           </button>
           <input
               type="file"
@@ -84,9 +85,9 @@ const ExploreScreen: React.FC<ExploreScreenProps> = ({ stories, onSelectStory, o
           />
           <button
             onClick={onCreateNew}
-            className="px-6 py-3 bg-amber-500 text-white font-bold text-lg rounded-full hover:bg-amber-600 transition-transform transform hover:scale-105 shadow-md"
+            className="px-6 py-3 bg-amber-500 text-white font-bold text-lg rounded-full hover:bg-amber-600 transition-transform transform hover:scale-105 shadow-md flex items-center gap-2"
           >
-            ✨ Create Your Own Story
+            <span className="text-2xl">✨</span> Create Your Own Story
           </button>
         </div>
       </header>

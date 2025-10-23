@@ -80,6 +80,16 @@ export const audioManager = {
             delete activeSources[key];
         }
     },
+
+    stopSpecificAudio: (key: string) => {
+        if (activeSources[key]) {
+             try {
+                activeSources[key].stop();
+                activeSources[key].disconnect();
+            } catch (e) { /* Already stopped */ }
+            delete activeSources[key];
+        }
+    },
     
     isPlaying: (key: string): boolean => {
         return !!activeSources[key];

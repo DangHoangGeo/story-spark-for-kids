@@ -28,6 +28,12 @@ export interface PageQuizData {
   correctAnswerIndex: number;
 }
 
+export interface ImageHotspot {
+  word: string;
+  x: number; // Percentage from left (0-100)
+  y: number; // Percentage from top (0-100)
+}
+
 export interface PageData {
   text: string;
   timedText?: WordTimestamp[];
@@ -36,6 +42,7 @@ export interface PageData {
   audio: string; // base64
   vocabulary?: VocabularyData;
   pageQuiz?: PageQuizData;
+  imageHotspots?: ImageHotspot[];
 }
 
 export interface QuizData {

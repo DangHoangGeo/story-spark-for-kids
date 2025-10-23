@@ -1,5 +1,5 @@
 import { GoogleGenAI, Type } from "@google/genai";
-import { StoryData, PageData, QuizData, VocabularyData, WordTimestamp, PageQuizData, SequencingGameData } from '../types';
+import { StoryData, PageData, QuizData, VocabularyData, WordTimestamp, PageQuizData, SequencingGameData, ImageHotspot } from '../types';
 
 // Map friendly names to API voice names
 const voiceMap: { [key: string]: string } = {
@@ -50,6 +50,19 @@ const storySchema = {
           imagePrompt: {
             type: Type.STRING,
             description: "A detailed prompt describing the scene for an image generation model. This prompt should focus on the action and setting, as the character's appearance will be prefixed from the characterSheet."
+          },
+          imageHotspots: {
+            type: Type.ARRAY,
+            description: "An array of 2-4 key objects visible in the illustration. Provide the object's name and its approximate (x, y) coordinates as percentages (0-100) on the image.",
+            items: {
+                type: Type.OBJECT,
+                properties: {
+                    word: { type: Type.STRING, description: "The name of the object." },
+                    x: { type: Type.NUMBER, description: "The horizontal position (0-100)." },
+                    y: { type: Type.NUMBER, description: "The vertical position (0-100)." }
+                },
+                required: ["word", "x", "y"]
+            }
           },
           vocabulary: {
             type: Type.OBJECT,
@@ -119,6 +132,7 @@ interface StoryStructure {
     text: string;
     timedText?: WordTimestamp[];
     imagePrompt: string;
+    imageHotspots?: ImageHotspot[];
     vocabulary?: {
       word: string;
       definition: string;
@@ -153,8 +167,9 @@ async function generateStoryStructure(
     1.  The story text.
     2.  A word-by-word timestamp array ('timedText').
     3.  A detailed image prompt describing the SCENE and the character's ACTIONS. Do NOT describe the character's appearance in the image prompt; that will be handled by the character sheet.
-    4.  An optional key vocabulary word.
-    5.  An optional simple multiple-choice question about that page's content ('pageQuiz').
+    4.  An array of 2-4 'imageHotspots' identifying key objects in the scene with their name ('word') and their approximate (x, y) coordinates as percentages.
+    5.  An optional key vocabulary word.
+    6.  An optional simple multiple-choice question about that page's content ('pageQuiz').
 
     Finally, create:
     1.  One multiple-choice quiz question about the entire story.
@@ -234,67 +249,35 @@ export interface StoryGenerationParams {
   characterDescription: string;
 }
 
-export const generateFullStory = async (
+export const generateInitialStory = async (
     params: StoryGenerationParams,
     setLoadingMessage: (message: string) => void
 ): Promise<Omit<StoryData, 'id' | 'loves'>> => {
   
   setLoadingMessage("Dreaming up a wonderful tale...");
   const structure = await generateStoryStructure(params);
+  
+  const placeholderPages: PageData[] = structure.pages.map(page => ({
+    text: page.text,
+    timedText: page.timedText,
+    imagePrompt: page.imagePrompt,
+    imageHotspots: page.imageHotspots,
+    pageQuiz: page.pageQuiz,
+    image: '', // Placeholder: Will be filled by populateStoryAssets
+    audio: '', // Placeholder: Will be filled by populateStoryAssets
+    vocabulary: page.vocabulary 
+        ? {
+            ...page.vocabulary,
+            definitionAudio: '', // Placeholder
+            funFactAudio: '', // Placeholder
+        } : undefined,
+  }));
 
-  setLoadingMessage("Gathering the magic ink and paper...");
-  const populatedPages: PageData[] = await Promise.all(
-    structure.pages.map(async (page, index): Promise<PageData> => {
-      setLoadingMessage(`Illustrating page ${index + 1} of ${structure.pages.length}...`);
-      // Combine character sheet with page-specific prompt for consistent illustrations
-      const fullImagePrompt = `${structure.characterSheet}. ${page.imagePrompt}. Style: ${params.artStyle}.`;
-      const imagePromise = generateImage(fullImagePrompt);
-      
-      setLoadingMessage(`Recording narration for page ${index + 1}...`);
-      const audioPromise = generateAudio(page.text, params.voice);
-
-      const definitionAudioPromise = page.vocabulary?.definition
-          ? generateAudio(page.vocabulary.definition, params.voice).catch(() => undefined)
-          : Promise.resolve(undefined);
-      
-      const funFactAudioPromise = page.vocabulary?.funFact
-          ? generateAudio(page.vocabulary.funFact, params.voice).catch(() => undefined)
-          : Promise.resolve(undefined);
-          
-      const [imageData, audioData, definitionAudioData, funFactAudioData] = await Promise.all([
-          imagePromise,
-          audioPromise,
-          definitionAudioPromise,
-          funFactAudioPromise
-      ]);
-
-      const finalPageData: PageData = {
-          text: page.text,
-          timedText: page.timedText,
-          imagePrompt: page.imagePrompt,
-          image: imageData,
-          audio: audioData,
-          pageQuiz: page.pageQuiz,
-      };
-
-      if (page.vocabulary && definitionAudioData && funFactAudioData) {
-          finalPageData.vocabulary = {
-              ...page.vocabulary,
-              definitionAudio: definitionAudioData,
-              funFactAudio: funFactAudioData,
-          };
-      }
-
-      return finalPageData;
-    })
-  );
-
-  setLoadingMessage("Putting the finishing touches...");
   return {
     title: structure.title,
     category: structure.category,
     characterSheet: structure.characterSheet,
-    pages: populatedPages,
+    pages: placeholderPages,
     quiz: structure.quiz,
     sequencingGame: structure.sequencingGame,
     targetAudience: params.audience,
@@ -302,4 +285,46 @@ export const generateFullStory = async (
     artStyle: params.artStyle,
     theme: params.theme,
   };
+};
+
+export const populateStoryAssets = async (
+    story: Omit<StoryData, 'id' | 'loves'>,
+    onPagePopulated: (page: PageData, index: number) => void
+) => {
+    for (let i = 0; i < story.pages.length; i++) {
+        const page = story.pages[i];
+
+        // Combine character sheet with page-specific prompt for consistent illustrations
+        const fullImagePrompt = `${story.characterSheet}. ${page.imagePrompt}. Style: ${story.artStyle}.`;
+        const imagePromise = generateImage(fullImagePrompt);
+        const audioPromise = generateAudio(page.text, story.voiceName || 'Leo (Warm & Friendly)');
+
+        const definitionAudioPromise = page.vocabulary?.definition
+            ? generateAudio(page.vocabulary.definition, story.voiceName || 'Leo (Warm & Friendly)').catch(() => undefined)
+            : Promise.resolve(undefined);
+        
+        const funFactAudioPromise = page.vocabulary?.funFact
+            ? generateAudio(page.vocabulary.funFact, story.voiceName || 'Leo (Warm & Friendly)').catch(() => undefined)
+            : Promise.resolve(undefined);
+            
+        const [imageData, audioData, definitionAudioData, funFactAudioData] = await Promise.all([
+            imagePromise,
+            audioPromise,
+            definitionAudioPromise,
+            funFactAudioPromise
+        ]);
+
+        const populatedPage: PageData = {
+            ...page,
+            image: imageData,
+            audio: audioData,
+        };
+
+        if (populatedPage.vocabulary && definitionAudioData && funFactAudioData) {
+            populatedPage.vocabulary.definitionAudio = definitionAudioData;
+            populatedPage.vocabulary.funFactAudio = funFactAudioData;
+        }
+        
+        onPagePopulated(populatedPage, i);
+    }
 };
