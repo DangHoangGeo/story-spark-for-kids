@@ -1,27 +1,13 @@
 import React, { useState } from 'react';
 import { QuizData, StoryData } from '../types';
 import { exportStoryAsJson } from '../utils/exportUtils';
+import Celebration from './Celebration';
 
 interface QuizScreenProps {
   quiz: QuizData;
   story: StoryData;
   onFinish: () => void;
 }
-
-const Celebration: React.FC = () => (
-    <div className="absolute inset-0 overflow-hidden pointer-events-none">
-        {Array.from({ length: 40 }).map((_, i) => {
-            const style = {
-                left: `${Math.random() * 100}%`,
-                top: `${Math.random() * 100}%`,
-                animationDelay: `${Math.random() * 0.5}s`,
-                transform: `scale(${Math.random() * 0.8 + 0.5})`,
-            };
-            const emoji = ['✨', '🎉', '🎈', '⭐'][Math.floor(Math.random() * 4)];
-            return <div key={i} className="sparkle-emoji" style={style}>{emoji}</div>;
-        })}
-    </div>
-);
 
 const QuizScreen: React.FC<QuizScreenProps> = ({ quiz, story, onFinish }) => {
   const [selectedAnswer, setSelectedAnswer] = useState<number | null>(null);
@@ -51,7 +37,7 @@ const QuizScreen: React.FC<QuizScreenProps> = ({ quiz, story, onFinish }) => {
   };
   
   return (
-    <div className="w-full max-w-2xl text-center p-8 bg-white rounded-2xl shadow-lg relative">
+    <div className="w-full max-w-2xl text-center p-8 bg-white rounded-2xl shadow-lg relative animate-fade-in">
       {isAnswered && selectedAnswer === quiz.correctAnswerIndex && <Celebration />}
       <h2 className="text-3xl font-bold text-amber-600 mb-6">Quiz Time!</h2>
       <p className="text-xl text-gray-700 mb-8">{quiz.question}</p>
@@ -83,7 +69,7 @@ const QuizScreen: React.FC<QuizScreenProps> = ({ quiz, story, onFinish }) => {
                     onClick={onFinish}
                     className="px-8 py-3 bg-amber-500 text-white font-bold rounded-full hover:bg-amber-600 transition-transform transform hover:scale-105"
                 >
-                    Share Your Story!
+                    Next Game!
                 </button>
           </div>
         </div>

@@ -1,5 +1,5 @@
 import { GoogleGenAI, Type } from "@google/genai";
-import { StoryData, PageData, QuizData, VocabularyData, WordTimestamp, PageQuizData } from '../types';
+import { StoryData, PageData, QuizData, VocabularyData, WordTimestamp, PageQuizData, SequencingGameData } from '../types';
 
 // Map friendly names to API voice names
 const voiceMap: { [key: string]: string } = {
@@ -12,6 +12,10 @@ const voiceMap: { [key: string]: string } = {
 const storySchema = {
   type: Type.OBJECT,
   properties: {
+    characterSheet: {
+      type: Type.STRING,
+      description: "A detailed visual description of the main character(s) to ensure consistency across all illustrations. For example: 'Finn is a small red fox with a bushy white-tipped tail, large triangular ears, and bright, curious green eyes. He wears a worn, tiny blue scarf around his neck.'"
+    },
     title: {
       type: Type.STRING,
       description: "A short, catchy title for the story."
@@ -22,7 +26,7 @@ const storySchema = {
     },
     pages: {
       type: Type.ARRAY,
-      description: "An array of 3 pages for the story.",
+      description: "An array of pages for the story.",
       items: {
         type: Type.OBJECT,
         properties: {
@@ -45,7 +49,7 @@ const storySchema = {
           },
           imagePrompt: {
             type: Type.STRING,
-            description: "A detailed prompt for an image generation model to create an illustration for this page. The style should be 'friendly, vibrant, cartoon-style'."
+            description: "A detailed prompt describing the scene for an image generation model. This prompt should focus on the action and setting, as the character's appearance will be prefixed from the characterSheet."
           },
           vocabulary: {
             type: Type.OBJECT,
@@ -90,12 +94,25 @@ const storySchema = {
         }
       },
       required: ["question", "options", "correctAnswerIndex"]
+    },
+    sequencingGame: {
+      type: Type.OBJECT,
+      description: "A sequencing game with 4-6 key events from the story in chronological order.",
+      properties: {
+        events: {
+          type: Type.ARRAY,
+          description: "An array of strings, where each string is a key event from the story.",
+          items: { type: Type.STRING }
+        }
+      },
+      required: ["events"]
     }
   },
-  required: ["title", "category", "pages", "quiz"]
+  required: ["characterSheet", "title", "category", "pages", "quiz", "sequencingGame"]
 };
 
 interface StoryStructure {
+  characterSheet: string;
   title: string;
   category: string;
   pages: { 
@@ -110,13 +127,38 @@ interface StoryStructure {
     pageQuiz?: PageQuizData
   }[];
   quiz: QuizData;
+  sequencingGame: SequencingGameData;
 }
 
-async function generateStoryStructure(prompt: string, audience: string): Promise<StoryStructure> {
+async function generateStoryStructure(
+  { prompt, audience, pageCount, artStyle, theme, characterName, characterDescription }: StoryGenerationParams
+): Promise<StoryStructure> {
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
   const response = await ai.models.generateContent({
     model: "gemini-2.5-pro",
-    contents: `Create a short, approximately 1-minute (3-page) children's story for a child in the "${audience}" age group, based on this idea: "${prompt}". The story should have a title, a category (Adventure, Fantasy, Science, or Friendship), and be suitable for the specified age. For each page, provide: 1) The story text. 2) A word-by-word timestamp array ('timedText'). 3) A detailed image prompt. 4) An optional key vocabulary word with definition and fun fact. 5) An optional simple multiple-choice question about that page's content ('pageQuiz'). Finally, create one multiple-choice quiz question about the entire story.`,
+    contents: `Create a children's story for a child in the "${audience}" age group based on this idea: "${prompt}". The story must be exactly ${pageCount} pages long.
+
+    **CRITICAL FIRST STEP:**
+    Start by creating a 'characterSheet'. This is a detailed visual description of the main character to ensure they look the same in every illustration. Base it on the user's input below.
+
+    **Story Details:**
+    *   **Theme/Tone:** ${theme}
+    *   **Art Style:** ${artStyle}
+    *   **Main Character Name:** ${characterName || 'Not specified'}
+    *   **Main Character Description:** ${characterDescription || 'Not specified'}
+
+    After creating the character sheet, generate the rest of the story: a title, a category (Adventure, Fantasy, Science, or Friendship), and the content for all ${pageCount} pages.
+
+    For each page, provide:
+    1.  The story text.
+    2.  A word-by-word timestamp array ('timedText').
+    3.  A detailed image prompt describing the SCENE and the character's ACTIONS. Do NOT describe the character's appearance in the image prompt; that will be handled by the character sheet.
+    4.  An optional key vocabulary word.
+    5.  An optional simple multiple-choice question about that page's content ('pageQuiz').
+
+    Finally, create:
+    1.  One multiple-choice quiz question about the entire story.
+    2.  A "sequencing game" with 4-6 key events from the story listed in chronological order.`,
     config: {
       responseMimeType: "application/json",
       responseSchema: storySchema,
@@ -145,6 +187,7 @@ async function generateImage(prompt: string): Promise<string> {
 
     if (!response.generatedImages?.[0]?.image?.imageBytes) {
         console.error("Image generation failed. No image data in response:", response);
+        // Fallback to a placeholder or throw an error
         throw new Error("Failed to generate an illustration for the story.");
     }
 
@@ -176,20 +219,42 @@ async function generateAudio(text: string, voice: string): Promise<string> {
   return base64Audio;
 }
 
-export const generateFullStory = async (prompt: string, audience: string, voice: string): Promise<Omit<StoryData, 'id' | 'loves'>> => {
-  const structure = await generateStoryStructure(prompt, audience);
+export interface StoryGenerationParams {
+  prompt: string;
+  audience: string;
+  voice: string;
+  pageCount: number;
+  artStyle: string;
+  theme: string;
+  characterName: string;
+  characterDescription: string;
+}
 
+export const generateFullStory = async (
+    params: StoryGenerationParams,
+    setLoadingMessage: (message: string) => void
+): Promise<Omit<StoryData, 'id' | 'loves'>> => {
+  
+  setLoadingMessage("Dreaming up a wonderful tale...");
+  const structure = await generateStoryStructure(params);
+
+  setLoadingMessage("Gathering the magic ink and paper...");
   const populatedPages: PageData[] = await Promise.all(
-    structure.pages.map(async (page): Promise<PageData> => {
-      const imagePromise = generateImage(page.imagePrompt);
-      const audioPromise = generateAudio(page.text, voice);
+    structure.pages.map(async (page, index): Promise<PageData> => {
+      setLoadingMessage(`Illustrating page ${index + 1} of ${structure.pages.length}...`);
+      // Combine character sheet with page-specific prompt for consistent illustrations
+      const fullImagePrompt = `${structure.characterSheet}. ${page.imagePrompt}. Style: ${params.artStyle}.`;
+      const imagePromise = generateImage(fullImagePrompt);
+      
+      setLoadingMessage(`Recording narration for page ${index + 1}...`);
+      const audioPromise = generateAudio(page.text, params.voice);
 
       const definitionAudioPromise = page.vocabulary?.definition
-          ? generateAudio(page.vocabulary.definition, voice).catch(() => undefined)
+          ? generateAudio(page.vocabulary.definition, params.voice).catch(() => undefined)
           : Promise.resolve(undefined);
       
       const funFactAudioPromise = page.vocabulary?.funFact
-          ? generateAudio(page.vocabulary.funFact, voice).catch(() => undefined)
+          ? generateAudio(page.vocabulary.funFact, params.voice).catch(() => undefined)
           : Promise.resolve(undefined);
           
       const [imageData, audioData, definitionAudioData, funFactAudioData] = await Promise.all([
@@ -220,12 +285,17 @@ export const generateFullStory = async (prompt: string, audience: string, voice:
     })
   );
 
+  setLoadingMessage("Putting the finishing touches...");
   return {
     title: structure.title,
     category: structure.category,
+    characterSheet: structure.characterSheet,
     pages: populatedPages,
     quiz: structure.quiz,
-    targetAudience: audience,
-    voiceName: voice,
+    sequencingGame: structure.sequencingGame,
+    targetAudience: params.audience,
+    voiceName: params.voice,
+    artStyle: params.artStyle,
+    theme: params.theme,
   };
 };

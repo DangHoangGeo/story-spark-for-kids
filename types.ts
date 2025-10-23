@@ -3,6 +3,7 @@ export enum AppState {
   LOADING,
   STORY,
   QUIZ,
+  SEQUENCING_GAME,
   EXPLORE,
   VIEW_STORY,
 }
@@ -43,6 +44,10 @@ export interface QuizData {
   correctAnswerIndex: number;
 }
 
+export interface SequencingGameData {
+  events: string[];
+}
+
 export interface StoryData {
   id: string;
   title: string;
@@ -50,6 +55,10 @@ export interface StoryData {
   loves: number;
   pages: PageData[];
   quiz: QuizData;
+  sequencingGame: SequencingGameData;
+  characterSheet: string; // A detailed visual description of the character for consistent image generation.
   targetAudience?: string; // e.g., "Preschoolers (4-5 years)"
   voiceName?: string; // e.g., "Nova (Bright & Cheerful)"
+  artStyle?: string;
+  theme?: string;
 }

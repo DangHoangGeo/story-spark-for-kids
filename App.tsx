@@ -5,6 +5,7 @@ import LoadingScreen from './components/LoadingScreen';
 import StoryViewer from './components/StoryViewer';
 import QuizScreen from './components/QuizScreen';
 import ExploreScreen from './components/ExploreScreen';
+import SequencingGameScreen from './components/SequencingGameScreen';
 import { generateFullStory } from './services/geminiService';
 import { getStories, loveStory as apiLoveStory } from './services/mockStoryService';
 
@@ -15,6 +16,7 @@ const App: React.FC = () => {
   const [currentPageIndex, setCurrentPageIndex] = useState<number>(0);
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [loadingMessage, setLoadingMessage] = useState<string>('');
 
   useEffect(() => {
     // Load initial stories from the mock service
@@ -24,12 +26,33 @@ const App: React.FC = () => {
     });
   }, []);
 
-  const handleCreateStory = useCallback(async (prompt: string, audience: string, voice: string) => {
+  const handleCreateStory = useCallback(async (
+    prompt: string, 
+    audience: string, 
+    voice: string,
+    pageCount: number,
+    artStyle: string,
+    theme: string,
+    characterName: string,
+    characterDescription: string
+  ) => {
     setAppState(AppState.LOADING);
     setError(null);
     setActiveStory(null);
     try {
-      const data = await generateFullStory(prompt, audience, voice);
+      const data = await generateFullStory(
+        {
+          prompt, 
+          audience, 
+          voice, 
+          pageCount, 
+          artStyle, 
+          theme, 
+          characterName, 
+          characterDescription
+        },
+        setLoadingMessage
+      );
       const newStory = {
         ...data,
         id: `story-${Date.now()}`,
@@ -40,8 +63,10 @@ const App: React.FC = () => {
       setAppState(AppState.STORY);
     } catch (err) {
       console.error('Failed to generate story:', err);
-      setError('Sorry, we couldn\'t create your story. Please try again with a different idea.');
+      setError('Sorry, we couldn\'t create your story. The magical ink might have spilled! Please try again with a different idea.');
       setAppState(AppState.LANDING);
+    } finally {
+      setLoadingMessage(''); // Reset message on completion or error
     }
   }, []);
 
@@ -94,6 +119,10 @@ const App: React.FC = () => {
       setCurrentPageIndex(prev => prev - 1);
     }
   };
+  
+  const handleStartSequencingGame = () => {
+    setAppState(AppState.SEQUENCING_GAME);
+  };
 
   const handleExitToExplore = () => {
     setAppState(AppState.EXPLORE);
@@ -103,7 +132,7 @@ const App: React.FC = () => {
 
   const renderContent = () => {
     if (isLoading && appState === AppState.EXPLORE) {
-      return <LoadingScreen />;
+      return <LoadingScreen message="Loading community stories..." />;
     }
 
     switch (appState) {
@@ -117,7 +146,7 @@ const App: React.FC = () => {
       case AppState.LANDING:
         return <LandingScreen onCreateStory={handleCreateStory} error={error} onBack={handleExitToExplore} />;
       case AppState.LOADING:
-        return <LoadingScreen />;
+        return <LoadingScreen message={loadingMessage} />;
       case AppState.STORY:
       case AppState.VIEW_STORY:
         if (!activeStory) return null;
@@ -126,6 +155,7 @@ const App: React.FC = () => {
             key={currentPageIndex}
             story={activeStory}
             page={activeStory.pages[currentPageIndex]}
+            currentPageIndex={currentPageIndex}
             isFirstPage={currentPageIndex === 0}
             isLastPage={currentPageIndex === activeStory.pages.length - 1}
             onNext={handleNextPage}
@@ -137,7 +167,10 @@ const App: React.FC = () => {
         );
       case AppState.QUIZ:
         if (!activeStory?.quiz) return null;
-        return <QuizScreen quiz={activeStory.quiz} story={activeStory} onFinish={() => handleFinishCreation(activeStory)} />;
+        return <QuizScreen quiz={activeStory.quiz} story={activeStory} onFinish={handleStartSequencingGame} />;
+      case AppState.SEQUENCING_GAME:
+        if (!activeStory?.sequencingGame) return null;
+        return <SequencingGameScreen game={activeStory.sequencingGame} onFinish={() => handleFinishCreation(activeStory)} />;
       default:
         return <ExploreScreen stories={communityStories} onSelectStory={handleSelectStory} onCreateNew={() => setAppState(AppState.LANDING)} onImportStory={handleImportStory} />;
     }

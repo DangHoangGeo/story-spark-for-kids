@@ -11,12 +11,13 @@ let mockStories: StoryData[] = [
     title: 'Finn the Brave Fox',
     category: 'Adventure',
     loves: 28,
+    characterSheet: "Finn is a small, brave red fox with a bushy, white-tipped tail, large triangular ears, bright green eyes, and a tiny blue scarf tied around his neck.",
     targetAudience: 'Preschoolers (4-5 years)',
     voiceName: 'Leo (Warm & Friendly)',
     pages: [
       {
         text: 'Once upon a time, a little fox named Finn found a mysterious, glowing key in the forest.',
-        imagePrompt: 'A small, brave cartoon fox named Finn holding a glowing key in a magical forest.',
+        imagePrompt: 'A small fox named Finn holding a glowing key in a magical forest, looking curious.',
         image: placeholderImage,
         audio: placeholderAudio,
         vocabulary: {
@@ -59,6 +60,13 @@ let mockStories: StoryData[] = [
       question: 'What did Finn find behind the mossy door?',
       options: ['A grumpy badger', 'Magical acorns', 'A slide'],
       correctAnswerIndex: 1
+    },
+    sequencingGame: {
+      events: [
+        "Finn found a glowing key.",
+        "The key led to a mossy door.",
+        "He found a treasure chest with acorns."
+      ]
     }
   },
   {
@@ -66,12 +74,13 @@ let mockStories: StoryData[] = [
     title: 'The Star Sailor',
     category: 'Fantasy',
     loves: 42,
+    characterSheet: "Lily is a young girl with short, curly brown hair and bright, wondering eyes. She wears a simple white sailor dress and captains a small wooden sailboat that floats in the sky.",
     targetAudience: 'Early Readers (6-7 years)',
     voiceName: 'Nova (Bright & Cheerful)',
     pages: [
         {
           text: 'Lily was a girl who sailed a boat through the night sky, catching fallen stars in her net.',
-          imagePrompt: 'A young girl in a small sailboat floating on a starry night sky, catching stars.',
+          imagePrompt: 'A young girl in a small sailboat floating on a starry night sky, catching stars with a net.',
           image: placeholderImage,
           audio: placeholderAudio,
            pageQuiz: {
@@ -82,7 +91,7 @@ let mockStories: StoryData[] = [
         },
         {
           text: 'One night, she met a friendly moon-whale who hummed a gentle song.',
-          imagePrompt: 'Lily the star sailor talking to a giant, friendly whale that looks like the moon.',
+          imagePrompt: 'Lily the star sailor talking to a giant, friendly whale that looks like the moon, both are smiling.',
           image: placeholderImage,
           audio: placeholderAudio,
           vocabulary: {
@@ -100,7 +109,7 @@ let mockStories: StoryData[] = [
         },
         {
           text: 'They sailed together, making sure every star was polished and bright before morning.',
-          imagePrompt: 'Lily and the moon-whale polishing stars together in the night sky.',
+          imagePrompt: 'Lily and the moon-whale polishing stars together in the night sky with soft cloths.',
           image: placeholderImage,
           audio: placeholderAudio,
           pageQuiz: {
@@ -114,6 +123,13 @@ let mockStories: StoryData[] = [
         question: 'Who did Lily meet in the night sky?',
         options: ['A grumpy astronaut', 'A moon-whale', 'A rocket ship'],
         correctAnswerIndex: 1
+      },
+      sequencingGame: {
+          events: [
+            "Lily sailed her boat in the night sky.",
+            "She met a friendly moon-whale.",
+            "They polished stars together."
+          ]
       }
   }
 ];

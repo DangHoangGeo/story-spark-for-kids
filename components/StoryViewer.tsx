@@ -2,10 +2,12 @@ import React, { useState, useEffect, useRef } from 'react';
 import { PageData, VocabularyData, StoryData, PageQuizData } from '../types';
 import { playAudio } from '../utils/audioUtils';
 import { exportStoryAsJson } from '../utils/exportUtils';
+import Celebration from './Celebration';
 
 interface StoryViewerProps {
   story: StoryData;
   page: PageData;
+  currentPageIndex: number;
   isFirstPage: boolean;
   isLastPage: boolean;
   onNext: () => void;
@@ -14,21 +16,6 @@ interface StoryViewerProps {
   isViewingSharedStory: boolean;
   onExit: () => void;
 }
-
-const Celebration: React.FC = () => (
-    <div className="absolute inset-0 overflow-hidden pointer-events-none">
-        {Array.from({ length: 20 }).map((_, i) => {
-            const style = {
-                left: `${Math.random() * 100}%`,
-                top: `${Math.random() * 100}%`,
-                animationDelay: `${Math.random() * 0.5}s`,
-                transform: `scale(${Math.random() * 0.5 + 0.5})`,
-            };
-            return <div key={i} className="sparkle-emoji" style={style}>✨</div>;
-        })}
-    </div>
-);
-
 
 const PageQuiz: React.FC<{ quiz: PageQuizData, onCorrectAnswer: () => void }> = ({ quiz, onCorrectAnswer }) => {
     const [selected, setSelected] = useState<number | null>(null);
@@ -54,7 +41,7 @@ const PageQuiz: React.FC<{ quiz: PageQuizData, onCorrectAnswer: () => void }> = 
 
     return (
         <div className="mt-6 p-4 bg-amber-100/50 rounded-xl relative">
-            {showCelebration && <Celebration />}
+            {showCelebration && <Celebration emojis={['✨']} />}
             <h4 className="font-bold text-lg text-amber-800 mb-3">{quiz.question}</h4>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                 {quiz.options.map((option, index) => (
@@ -69,7 +56,7 @@ const PageQuiz: React.FC<{ quiz: PageQuizData, onCorrectAnswer: () => void }> = 
 };
 
 
-const StoryViewer: React.FC<StoryViewerProps> = ({ story, page, isFirstPage, isLastPage, onNext, onPrev, onLove, isViewingSharedStory, onExit }) => {
+const StoryViewer: React.FC<StoryViewerProps> = ({ story, page, currentPageIndex, isFirstPage, isLastPage, onNext, onPrev, onLove, isViewingSharedStory, onExit }) => {
   const [isAnimating, setIsAnimating] = useState(false);
   const [vocabData, setVocabData] = useState<VocabularyData | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -251,7 +238,9 @@ const StoryViewer: React.FC<StoryViewerProps> = ({ story, page, isFirstPage, isL
             </div>
         </div>
 
-        <h2 className="text-3xl font-bold text-gray-800 mb-4 text-center">{story.title}</h2>
+        <h2 className="text-3xl font-bold text-gray-800 mb-2 text-center">{story.title}</h2>
+        <p className="text-sm text-gray-500 mb-4">Page {currentPageIndex + 1} of {story.pages.length}</p>
+
 
         <div className="relative w-full aspect-square max-w-xl bg-gray-200 rounded-2xl shadow-lg mb-4 overflow-hidden">
           <img src={`data:image/png;base64,${page.image}`} alt={page.imagePrompt} className="w-full h-full object-cover" />
